@@ -120,6 +120,8 @@ class FeatureMatchingTanima:
         """SIFT descriptor eşleştirme skoru"""
         if desc1 is None or desc2 is None:
             return 0.0
+        if len(desc1) == 0 or len(desc2) == 0:
+            return 0.0
         
         # KNN matching
         matches = self.bf_matcher.knnMatch(desc1, desc2, k=2)

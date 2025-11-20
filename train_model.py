@@ -37,16 +37,32 @@ class MakineParcaDataset(Dataset):
         self.samples = []
         self.classes = []
         
-        # Sınıfları topla
-        for class_dir in self.data_dir.iterdir():
-            if class_dir.is_dir():
-                self.classes.append(class_dir.name)
-                
-                # Her sınıftaki görüntüleri ekle
-                for img_path in class_dir.glob('*.jpg'):
-                    self.samples.append((img_path, len(self.classes) - 1))
-                for img_path in class_dir.glob('*.png'):
-                    self.samples.append((img_path, len(self.classes) - 1))
+        desteklenen_formatlar = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']
+        
+        # Sınıfları topla (sıralı ve en az 1 görüntüsü olan klasörleri ekle)
+        for class_dir in sorted(self.data_dir.iterdir()):
+            if not class_dir.is_dir():
+                continue
+            
+            goruntuler = []
+            for pattern in desteklenen_formatlar:
+                goruntuler.extend(class_dir.glob(pattern))
+            
+            if not goruntuler:
+                # Görüntü içermeyen sınıfları atla; aksi halde model kullanılmayan class id'ler oluşturur
+                continue
+            
+            class_idx = len(self.classes)
+            self.classes.append(class_dir.name)
+            
+            for img_path in goruntuler:
+                self.samples.append((img_path, class_idx))
+        
+        if not self.samples:
+            raise ValueError(
+                f"Veri bulunamadı: {self.data_dir}. "
+                "Her alt klasörde en az 1 adet .jpg/.png olmalı."
+            )
         
         print(f"Toplam {len(self.samples)} görüntü yüklendi")
         print(f"Sınıflar: {self.classes}")
@@ -106,6 +122,13 @@ def train_model(data_dir, num_epochs=25, batch_size=32, learning_rate=0.001):
     
     # Veri setini yükle
     dataset = MakineParcaDataset(data_dir, transform=train_transform)
+    
+    if len(dataset.samples) < 2 or len(dataset.classes) < 2:
+        raise ValueError(
+            "Eğitim için yeterli veri yok. "
+            "En az 2 sınıf ve toplamda 2+ görüntü bulunmalı. "
+            "training_data/<parca_adi>/ klasörlerine örnekler ekleyin."
+        )
     
     # Train/Validation split
     train_size = int(0.8 * len(dataset))
@@ -205,7 +228,7 @@ def test_model(model_path, test_image_path):
     """Eğitilmiş modeli test et"""
     
     # Modeli yükle
-    checkpoint = torch.load(model_path)
+    checkpoint = torch.load(model_path, map_location='cpu')
     classes = checkpoint['classes']
     num_classes = len(classes)
     
