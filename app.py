@@ -686,10 +686,11 @@ def main():
         yontemler = ["Kural Tabanlı (Basit)"]
         
         # YOLO model kontrolü
+        yolo_model_path = "runs/detect/train/weights/best.pt"  # Varsayılan değer
         if YOLO_KULLANILABILIR:
             yolo_model_path = st.text_input(
                 "YOLO Model Yolu:",
-                value="runs/detect/train/weights/best.pt",
+                value=yolo_model_path,
                 help="Eğitilmiş YOLO model dosyasının yolu"
             )
             if Path(yolo_model_path).exists():
@@ -740,6 +741,12 @@ def main():
             "Makine parçası görüntüsü seçin",
             type=['jpg', 'jpeg', 'png']
         )
+        
+        # Temizle butonu
+        if st.button("🗑️ Sonuçları Temizle"):
+            if 'sonuc' in st.session_state:
+                del st.session_state.sonuc
+                st.rerun()
         
         # Örnek parçalar
         st.subheader("veya örnek bir parça seçin:")
@@ -896,8 +903,8 @@ def main():
                     sonuc_img = yontem_bilgi['sonuc_goruntu']
                     # BGR to RGB dönüşümü
                     sonuc_img_rgb = cv2.cvtColor(sonuc_img, cv2.COLOR_BGR2RGB)
-                st.image(sonuc_img_rgb, caption="Tespit Edilen Nesneler (Bounding Box)", use_container_width=True)
-                
+                    st.image(sonuc_img_rgb, caption="Tespit Edilen Nesneler (Bounding Box)", use_container_width=True)
+                    
                     # Tüm tespitleri göster
                     if yontem_bilgi.get('tum_tespitler'):
                         st.markdown("**🔍 Tespit Edilen Tüm Nesneler:**")
