@@ -86,29 +86,53 @@ class GorselIslemci:
             
             # Şekil sınıflandırması
             vertices = len(approx)
-            if vertices == 3:
+            
+            # Dairesellik kontrolü - öncelikli
+            if circularity > 0.75:  # Yüksek dairesellik
+                shape = "Daire"
+                shape_type = "Daire/Elips"
+                vertices_display = 0  # Daire için köşe sayısı 0
+                tip = "Daire"
+            elif vertices == 3:
                 shape = "Üçgen"
+                shape_type = "Üçgen"
+                vertices_display = 3
+                tip = "Üçgen"
             elif vertices == 4:
                 aspect_ratio = float(w) / h
                 if 0.95 <= aspect_ratio <= 1.05:
                     shape = "Kare"
+                    shape_type = "Kare"
                 else:
                     shape = "Dikdörtgen"
+                    shape_type = "Dikdörtgen"
+                vertices_display = 4
+                tip = shape
             elif vertices > 4:
-                if circularity > 0.8:
+                if circularity > 0.6:
                     shape = "Daire"
+                    shape_type = "Daire/Elips"
+                    vertices_display = 0
+                    tip = "Daire"
                 else:
-                    shape = "Elips/Çokgen"
+                    shape = "Çokgen"
+                    shape_type = "Çokgen"
+                    vertices_display = vertices
+                    tip = f"{vertices}-Gen"
             else:
                 shape = "Belirsiz"
+                shape_type = "Belirsiz"
+                vertices_display = vertices
+                tip = "Belirsiz"
             
             sonuclar.append({
                 'sekil': shape,
+                'tip': tip,
                 'alan': area,
                 'cevre': perimeter,
                 'merkez': (cx, cy),
                 'sinir': (x, y, w, h),
-                'koseler': vertices,
+                'koseler': vertices_display,
                 'dairesellik': circularity,
                 'kontur': contour
             })

@@ -1000,11 +1000,18 @@ def main():
                     if sonuc.get("sekiller"):
                         st.markdown("**🔷 Şekil Analizi Sonuçları:**")
                         for i, sekil in enumerate(sonuc["sekiller"], 1):
+                            # Dairesellik bazlı öneri
+                            oneri = ""
+                            if sekil['dairesellik'] > 0.75:
+                                oneri = "🔴 (Daire/Elips → **Rulman** veya **Dişli** olabilir)"
+                            elif sekil['dairesellik'] > 0.6:
+                                oneri = "🟡 (Yuvarlağa yakın şekil)"
+                            
                             st.markdown(f"""
                             **Şekil {i}:**
-                            - Tip: **{sekil['sekil']}** 
-                            - Dairesellik: {sekil['dairesellik']:.3f} 
-                              {'🔴 (Daire/Elips → Rulman olabilir)' if sekil['dairesellik'] > 0.75 else ''}
+                            - Tip: **{sekil.get('tip', sekil['sekil'])}** 
+                            - Şekil: **{sekil['sekil']}**
+                            - Dairesellik: {sekil['dairesellik']:.3f} {oneri}
                             - Alan: {sekil['alan']:.0f} px²
                             - Köşe Sayısı: {sekil['koseler']}
                             """)
