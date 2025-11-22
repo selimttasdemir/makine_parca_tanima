@@ -1,0 +1,12 @@
+# YOLOv8 Dataset Configuration
+# Makine Parçası Tespit Modeli
+
+# Paths (relative to this yaml file)
+path: .  # dataset root dir
+train: train/images  # train images
+val: val/images      # val images  
+test: test/images    # test images (optional)
+
+# Classes
+nc: 4  # number of classes
+names: ['Bearing', 'Bolt', 'Gear', 'Nut']  # class names

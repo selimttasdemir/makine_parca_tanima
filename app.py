@@ -38,6 +38,13 @@ try:
 except ImportError:
     FEATURE_KULLANILABILIR = False
 
+# YOLO için import
+try:
+    from ultralytics import YOLO
+    YOLO_KULLANILABILIR = True
+except ImportError:
+    YOLO_KULLANILABILIR = False
+
 class MakineParcaTanima:
     def __init__(self):
         """Sistem başlatıcı"""
@@ -45,6 +52,12 @@ class MakineParcaTanima:
         self.device = None
         self.transform = None
         self.parca_veritabani = self.veritabani_yukle()
+        self.yolo_sinif_map = {
+            'Bearing': 'rulman',
+            'Bolt': 'vida',
+            'Gear': 'disli',
+            'Nut': 'somun'
+        }
     
     def _init_torch(self):
         """PyTorch'u lazy init et"""
@@ -330,6 +343,265 @@ class MakineParcaTanima:
             "ozellikler": [],
             "cesitleri": []
         })
+    
+    def yolo_tahmin(self, image_path, model_path='runs/detect/train/weights/best.pt'):
+        """YOLO modeli ile tahmin yap"""
+        if not YOLO_KULLANILABILIR:
+            return None
+        
+        if not Path(model_path).exists():
+            return None
+        
+        try:
+            # YOLO modelini yükle
+            model = YOLO(model_path)
+            
+            # Tahmin yap
+            results = model.predict(image_path, verbose=False, conf=0.25)
+            
+            if len(results) > 0 and results[0].boxes is not None:
+                boxes = results[0].boxes
+                
+                # Tüm tespit edilen nesneleri topla
+                tespitler = []
+                for box in boxes:
+                    sinif_id = int(box.cls[0])
+                    guven = float(box.conf[0])
+                    sinif_adi = model.names[sinif_id]
+                    
+                    # Bounding box koordinatları (xyxy format)
+                    xyxy = box.xyxy[0].cpu().numpy()
+                    
+                    tespitler.append({
+                        'sinif_adi': sinif_adi,
+                        'veritabani_adi': self.yolo_sinif_map.get(sinif_adi, sinif_adi.lower()),
+                        'guven': guven,
+                        'bbox': xyxy.tolist()
+                    })
+                
+                # En yüksek güvenli tespiti döndür
+                if tespitler:
+                    en_iyi = max(tespitler, key=lambda x: x['guven'])
+                    return {
+                        'parca': en_iyi['veritabani_adi'],
+                        'guven': en_iyi['guven'],
+                        'sinif': en_iyi['sinif_adi'],
+                        'tum_tespitler': tespitler,
+                        'toplam_nesne': len(tespitler),
+                        'sonuc_goruntu': results[0].plot()  # Çizilmiş görüntü
+                    }
+            
+            return None
+            
+        except Exception as e:
+            st.error(f"YOLO tahmin hatası: {e}")
+            return None
+
+
+def performans_sayfasi():
+    """Model performans test sayfası"""
+    st.title("📊 Model Performans Testi")
+    st.markdown("""
+    Bu sayfada eğitilmiş modelinizin test seti üzerindeki doğruluğunu ölçebilirsiniz.
+    """)
+    
+    # Model seçimi
+    model_path = st.text_input(
+        "Model Dosyası Yolu:",
+        value="runs/detect/train/weights/best.pt"
+    )
+    
+    if not Path(model_path).exists():
+        st.warning(f"⚠️ Model dosyası bulunamadı: {model_path}")
+        st.info("Lütfen önce modeli eğitin veya doğru yolu girin.")
+        return
+    
+    # Test limiti
+    col1, col2 = st.columns(2)
+    with col1:
+        test_limiti = st.number_input(
+            "Test Edilecek Görüntü Sayısı (0=Hepsi)",
+            min_value=0,
+            max_value=1000,
+            value=50,
+            step=10
+        )
+    
+    with col2:
+        test_klasoru = st.text_input(
+            "Test Klasörü:",
+            value="test"
+        )
+    
+    # Test başlat butonu
+    if st.button("🧪 Testi Başlat", type="primary"):
+        try:
+            from ultralytics import YOLO
+            from test_dogruluk import ModelDogrulukTest
+            
+            with st.spinner("Model yükleniyor..."):
+                model = YOLO(model_path)
+            
+            st.success("✅ Model yüklendi!")
+            
+            # Test seti analizi
+            with st.spinner("Test seti analiz ediliyor..."):
+                tester = ModelDogrulukTest(test_path=test_klasoru)
+                analiz = tester.test_seti_analizi()
+            
+            if analiz:
+                st.subheader("📁 Test Seti Bilgileri")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Toplam Görüntü", analiz['toplam_goruntu'])
+                with col2:
+                    st.metric("Toplam Nesne", analiz['toplam_nesne'])
+                with col3:
+                    st.metric("Ort. Nesne/Görüntü", f"{analiz['ortalama_nesne']:.2f}")
+                
+                # Sınıf dağılımı grafiği
+                st.markdown("**Sınıf Dağılımı:**")
+                import pandas as pd
+                df_sinif = pd.DataFrame(
+                    list(analiz['sinif_dagilimi'].items()),
+                    columns=['Sınıf', 'Sayı']
+                )
+                st.bar_chart(df_sinif.set_index('Sınıf'))
+            
+            # Model testi
+            st.divider()
+            st.subheader("🔬 Model Test Ediliyor...")
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            limit = test_limiti if test_limiti > 0 else None
+            
+            with st.spinner(f"Test ediliyor... (Bu işlem biraz zaman alabilir)"):
+                sonuclar = tester.model_test_et(model, limit=limit)
+                progress_bar.progress(100)
+            
+            if sonuclar:
+                status_text.success("✅ Test tamamlandı!")
+                
+                # Genel doğruluk
+                st.divider()
+                st.subheader("📈 Test Sonuçları")
+                
+                # Büyük metrik
+                dogruluk_yuzde = sonuclar['genel_dogruluk'] * 100
+                dogruluk_renk = "normal"
+                if dogruluk_yuzde >= 90:
+                    dogruluk_renk = "normal"
+                    emoji = "🎯"
+                elif dogruluk_yuzde >= 75:
+                    emoji = "✅"
+                elif dogruluk_yuzde >= 60:
+                    emoji = "⚠️"
+                else:
+                    emoji = "❌"
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(
+                        f"{emoji} Genel Doğruluk",
+                        f"%{dogruluk_yuzde:.2f}",
+                        delta=None
+                    )
+                
+                with col2:
+                    st.metric(
+                        "✅ Doğru Tahmin",
+                        f"{sonuclar['toplam_dogru']}/{sonuclar['toplam_nesne']}"
+                    )
+                
+                with col3:
+                    st.metric(
+                        "❌ Yanlış Tahmin",
+                        f"{sonuclar['toplam_yanlis']}/{sonuclar['toplam_nesne']}"
+                    )
+                
+                # Sınıf bazında doğruluk
+                st.divider()
+                st.subheader("📊 Sınıf Bazında Performans")
+                
+                # DataFrame oluştur
+                sinif_data = []
+                for sinif, dogruluk in sonuclar['sinif_dogruluk'].items():
+                    stats = sonuclar['sinif_istatistik'][sinif]
+                    sinif_data.append({
+                        'Sınıf': sinif,
+                        'Doğruluk (%)': f"{dogruluk*100:.2f}",
+                        'Doğru': stats['dogru'],
+                        'Yanlış': stats['yanlis'],
+                        'Toplam': stats['toplam']
+                    })
+                
+                df_sinif_perf = pd.DataFrame(sinif_data)
+                df_sinif_perf = df_sinif_perf.sort_values('Doğruluk (%)', ascending=False)
+                
+                st.dataframe(df_sinif_perf, use_container_width=True, hide_index=True)
+                
+                # Sınıf doğruluk grafiği
+                st.markdown("**Sınıf Doğruluk Grafiği:**")
+                sinif_dogr_data = {k: v*100 for k, v in sonuclar['sinif_dogruluk'].items()}
+                st.bar_chart(sinif_dogr_data)
+                
+                # Yanlış tahminler
+                yanlis_tahminler = [s for s in sonuclar['detayli_sonuclar'] if not s['dogru']]
+                
+                if yanlis_tahminler:
+                    st.divider()
+                    st.subheader("❌ Yanlış Tahmin Örnekleri")
+                    
+                    goster_sayi = st.slider(
+                        "Gösterilecek örnek sayısı:",
+                        min_value=5,
+                        max_value=min(50, len(yanlis_tahminler)),
+                        value=min(10, len(yanlis_tahminler))
+                    )
+                    
+                    # Tablo oluştur
+                    yanlis_data = []
+                    for yanlis in yanlis_tahminler[:goster_sayi]:
+                        yanlis_data.append({
+                            'Görüntü': yanlis['goruntu'],
+                            'Gerçek Sınıf': yanlis['gercek'],
+                            'Tahmin': yanlis['tahmin'],
+                            'Güven (%)': f"{yanlis['guven']*100:.1f}"
+                        })
+                    
+                    df_yanlis = pd.DataFrame(yanlis_data)
+                    st.dataframe(df_yanlis, use_container_width=True, hide_index=True)
+                
+                # Sonuçları kaydet
+                st.divider()
+                if st.button("💾 Sonuçları Kaydet (JSON)"):
+                    kayit_yolu = "test_sonuclari.json"
+                    tester.sonuclari_kaydet(sonuclar, kayit_yolu)
+                    st.success(f"✅ Sonuçlar kaydedildi: {kayit_yolu}")
+                    
+                    # İndirme butonu
+                    with open(kayit_yolu, 'r', encoding='utf-8') as f:
+                        json_str = f.read()
+                    
+                    st.download_button(
+                        label="📥 JSON Dosyasını İndir",
+                        data=json_str,
+                        file_name=kayit_yolu,
+                        mime="application/json"
+                    )
+                
+        except ImportError as e:
+            st.error(f"❌ Gerekli kütüphane bulunamadı: {e}")
+            st.info("Lütfen şu komutu çalıştırın: pip install ultralytics")
+        except Exception as e:
+            st.error(f"❌ Hata oluştu: {e}")
+            import traceback
+            with st.expander("🔍 Hata Detayları"):
+                st.code(traceback.format_exc())
 
 
 def main():
@@ -340,6 +612,21 @@ def main():
         layout="wide"
     )
     
+    # Sidebar - Sayfa seçimi
+    with st.sidebar:
+        st.title("🔧 Menü")
+        sayfa = st.radio(
+            "Sayfa Seçin:",
+            ["🏠 Ana Sayfa - Parça Tanıma", "📊 Model Performans Testi"],
+            index=0
+        )
+    
+    # Sayfa yönlendirmesi
+    if "Model Performans" in sayfa:
+        performans_sayfasi()
+        return
+    
+    # Ana sayfa
     st.title("🔧 Makine Parçası Tanıma Sistemi")
     st.markdown("""
     Bu sistem görüntü işleme teknolojisi kullanarak makine parçalarını tanır ve 
@@ -398,6 +685,19 @@ def main():
         
         yontemler = ["Kural Tabanlı (Basit)"]
         
+        # YOLO model kontrolü
+        if YOLO_KULLANILABILIR:
+            yolo_model_path = st.text_input(
+                "YOLO Model Yolu:",
+                value="runs/detect/train/weights/best.pt",
+                help="Eğitilmiş YOLO model dosyasının yolu"
+            )
+            if Path(yolo_model_path).exists():
+                yontemler.insert(0, "🎯 YOLO (Eğitilmiş Model)")
+                st.success("✅ YOLO modeli bulundu!")
+            else:
+                st.warning("⚠️ YOLO modeli bulunamadı")
+        
         if hibrit_sistem:
             if hibrit_sistem.dl_kullanilabilir:
                 yontemler.append("Deep Learning")
@@ -410,7 +710,7 @@ def main():
         secili_yontem = st.selectbox(
             "Yöntem seçin:",
             yontemler,
-            index=len(yontemler)-1 if len(yontemler) > 1 else 0
+            index=0 if "YOLO" in yontemler[0] else (len(yontemler)-1 if len(yontemler) > 1 else 0)
         )
         
         if hibrit_sistem:
@@ -471,7 +771,29 @@ def main():
                     sekiller = GorselIslemci.sekil_analizi(img_cv)
                     
                     # Seçilen yönteme göre tanıma
-                    if secili_yontem == "Kural Tabanlı (Basit)":
+                    if secili_yontem == "🎯 YOLO (Eğitilmiş Model)":
+                        # YOLO ile tahmin
+                        yolo_sonuc = sistem.yolo_tahmin(temp_path, model_path=yolo_model_path)
+                        
+                        if yolo_sonuc:
+                            parca_adi = yolo_sonuc['parca']
+                            yontem_bilgi = {
+                                "yontem": "YOLO v8",
+                                "guven": yolo_sonuc['guven'],
+                                "detay": f"YOLOv8 Object Detection - {yolo_sonuc['toplam_nesne']} nesne tespit edildi",
+                                "tum_tespitler": yolo_sonuc['tum_tespitler'],
+                                "sonuc_goruntu": yolo_sonuc['sonuc_goruntu']
+                            }
+                        else:
+                            # Tespit başarısız, fallback
+                            parca_adi = sistem.parca_tanima_basit(ozellikler)
+                            yontem_bilgi = {
+                                "yontem": "YOLO (Tespit Yok)",
+                                "guven": 0.3,
+                                "detay": "YOLO hiçbir nesne tespit edemedi, basit yönteme geçildi"
+                            }
+                    
+                    elif secili_yontem == "Kural Tabanlı (Basit)":
                         parca_adi = sistem.parca_tanima_basit(ozellikler)
                         yontem_bilgi = {
                             "yontem": "Kural Tabanlı",
@@ -561,9 +883,37 @@ def main():
         if 'sonuc' in st.session_state:
             sonuc = st.session_state.sonuc
             parca_bilgi = sistem.bilgi_getir(sonuc["parca_adi"])
+            yontem_bilgi = sonuc.get("yontem_bilgi", {})
             
             # Tanıma sonucu
             st.success(f"✅ Tespit Edilen Parça: **{parca_bilgi['isim']}**")
+            
+            # YOLO tespit sonucu görselini göster
+            if yontem_bilgi.get('sonuc_goruntu') is not None:
+                try:
+                    import cv2
+                    st.subheader("🎯 YOLO Tespit Sonucu")
+                    sonuc_img = yontem_bilgi['sonuc_goruntu']
+                    # BGR to RGB dönüşümü
+                    sonuc_img_rgb = cv2.cvtColor(sonuc_img, cv2.COLOR_BGR2RGB)
+                st.image(sonuc_img_rgb, caption="Tespit Edilen Nesneler (Bounding Box)", use_container_width=True)
+                
+                    # Tüm tespitleri göster
+                    if yontem_bilgi.get('tum_tespitler'):
+                        st.markdown("**🔍 Tespit Edilen Tüm Nesneler:**")
+                        for i, tespit in enumerate(yontem_bilgi['tum_tespitler'], 1):
+                            col1, col2, col3 = st.columns([2, 2, 1])
+                            with col1:
+                                st.write(f"**{i}. {tespit['sinif_adi']}**")
+                            with col2:
+                                st.write(f"Türkçe: *{sistem.parca_veritabani.get(tespit['veritabani_adi'], {}).get('isim', tespit['sinif_adi'])}*")
+                            with col3:
+                                st.write(f"🎯 %{tespit['guven']*100:.1f}")
+                    
+                    st.divider()
+                except Exception as e:
+                    st.warning(f"⚠️ Tespit görseli gösterilemiyor: {str(e)}")
+                    st.divider()
             
             # Yöntem bilgisi
             yontem_bilgi = sonuc.get("yontem_bilgi", {})
