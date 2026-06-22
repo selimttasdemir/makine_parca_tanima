@@ -52,7 +52,7 @@ models/
 *.jpg
 *.jpeg
 *.png
-!example_images/*.png
+!photo/*.png
 
 # Streamlit
 .streamlit/
