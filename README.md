@@ -70,7 +70,7 @@ ESP32Cam akışında YOLO modeli gerçek zamanlı nesne tespiti yapar ve sonuçl
 
 ### Dataset İstatistikleri
 
-![Dataset istatistikleri](dataset_statistics.png)
+![Dataset istatistikleri](photo/dataset_statistics.png)
 
 `check_dataset.py` çalıştırıldığında eğitim, doğrulama ve test verilerinin sınıf dağılımı `dataset_statistics.png` olarak kaydedilir.
 
