@@ -2,7 +2,7 @@
 
 Görüntü işleme, derin öğrenme ve YOLO tabanlı nesne tespiti ile makine parçalarını tanıyan Python projesi. Sistem; tek görsel analizi, YOLO ile çoklu nesne tespiti, ResNet50 sınıflandırma, feature matching, hibrit tanıma ve ESP32Cam üzerinden canlı kamera desteği sunar.
 
-![Makine parçası tanıma demosu](makine_parca_tanima.gif)
+![Makine parçası tanıma demosu](photo/makine_parca_tanima.gif)
 
 ## İçindekiler
 
@@ -46,25 +46,25 @@ Desteklenen temel sınıflar:
 
 ### Web Arayüzü ile YOLO Analizi
 
-![Görsel yükleme ve YOLO analiz sonucu](<Ekran Görüntüsü - 2026-06-21 18-19-15.png>)
+![Görsel yükleme ve YOLO analiz sonucu](<photo/Ekran Görüntüsü - 2026-06-21 18-19-15.png>)
 
 Yüklenen dişli görseli YOLO modeliyle analiz edilir, parça sınıfı ve güven skoru arayüzde gösterilir.
 
 ### Parça Bilgisi ve Güven Skoru
 
-![Parça tanımı ve güven skoru](<Ekran Görüntüsü - 2026-06-21 18-19-41.png>)
+![Parça tanımı ve güven skoru](<photo/Ekran Görüntüsü - 2026-06-21 18-19-41.png>)
 
 Tanıma sonucundan sonra parça açıklaması, kullanım alanları, teknik özellikler ve alt tür bilgileri görüntülenir.
 
 ### Görüntü İşleme Detayları
 
-![Gri tonlama ve kenar tespiti](<Ekran Görüntüsü - 2026-06-21 18-19-51.png>)
+![Gri tonlama ve kenar tespiti](<photo/Ekran Görüntüsü - 2026-06-21 18-19-51.png>)
 
 Gri tonlama, kenar tespiti ve şekil analizi çıktıları görsel işleme detaylarında incelenebilir.
 
 ### ESP32Cam Canlı Tespit
 
-![ESP32Cam canlı YOLO tespit ekranı](<Ekran Görüntüsü - 2026-06-21 18-17-34.png>)
+![ESP32Cam canlı YOLO tespit ekranı](<photo/Ekran Görüntüsü - 2026-06-21 18-17-34.png>)
 
 ESP32Cam akışında YOLO modeli gerçek zamanlı nesne tespiti yapar ve sonuçları canlı görüntü üzerine çizer.
 
