@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import os
 import warnings
+import time
 
 # PyTorch uyarılarını bastır
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -44,6 +45,15 @@ try:
     YOLO_KULLANILABILIR = True
 except ImportError:
     YOLO_KULLANILABILIR = False
+
+# ESP32Cam için import
+try:
+    from esp32cam_handler import (
+        ESP32CamHandler, ESP32CamBuffer, FrameProcessor, esp32_durum_kontrol
+    )
+    ESP32CAM_KULLANILABILIR = True
+except ImportError:
+    ESP32CAM_KULLANILABILIR = False
 
 class MakineParcaTanima:
     def __init__(self):
@@ -604,6 +614,371 @@ def performans_sayfasi():
                 st.code(traceback.format_exc())
 
 
+def esp32_sayfasi():
+    """ESP32Cam canlı kamera tanıma sayfası"""
+    st.title("📹 ESP32Cam Canlı Kamera Tanıma")
+    st.markdown("""
+    Bu sayfada ESP32Cam modülünden alınan canlı görüntüler üzerinde gerçek zamanlı 
+    makine parçası tanıması yapabilirsiniz.
+    
+    **Gereksiz kurulum:**
+    - ESP32Cam modülü
+    - MicroPython yazılımı
+    - Web sunucusu (webrepl veya custom firmware)
+    """)
+    
+    if not ESP32CAM_KULLANILABILIR:
+        st.error("❌ ESP32Cam modülü yüklenmemiş. Lütfen şu komutu çalıştırın:")
+        st.code("pip install requests")
+        return
+    
+    # Sidebar ayarları
+    with st.sidebar:
+        st.header("⚙️ ESP32Cam Ayarları")
+        
+        # Bağlantı konfigürasyonu
+        st.subheader("🔌 Bağlantı")
+        esp32_ip = st.text_input(
+            "ESP32 IP Adresi:",
+            value=st.session_state.get("esp32_ip", "192.168.1.196"),
+            placeholder="192.168.1.196"
+        )
+        
+        esp32_port = st.number_input(
+            "Port:",
+            min_value=1,
+            max_value=65535,
+            value=st.session_state.get("esp32_port", 80),
+            step=1
+        )
+        
+        # Bağlantı durumu kontrol
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔍 Bağlantı Kontrol", use_container_width=True):
+                with st.spinner("Kontrol ediliyor..."):
+                    durum = esp32_durum_kontrol(esp32_ip, esp32_port)
+                    st.session_state['esp32_durum'] = durum
+        
+        with col2:
+            if st.button("🔄 Yenile", use_container_width=True):
+                st.rerun()
+        
+        # Bağlantı durumu göster
+        if 'esp32_durum' in st.session_state:
+            durum = st.session_state['esp32_durum']
+            if "Online" in durum.get("durum", ""):
+                st.success(f"✅ {durum['durum']}")
+            else:
+                st.warning(f"⚠️ {durum.get('durum', 'Bilinmiyor')}")
+            
+            if durum.get('error'):
+                st.error(f"Hata: {durum['error']}")
+    
+    ESP32_GORUNTU_GENISLIK = 720
+    ESP32_GORUNTU_YUKSEKLIK = 560
+    
+    # Session state başlat
+    if 'esp32_handler' not in st.session_state:
+        st.session_state.esp32_handler = None
+    
+    if 'esp32_streaming' not in st.session_state:
+        st.session_state.esp32_streaming = False
+    
+    if 'esp32_frames' not in st.session_state:
+        st.session_state.esp32_frames = []
+    
+    # IP adresini session'a kaydet
+    st.session_state.esp32_ip = esp32_ip
+    st.session_state.esp32_port = esp32_port
+    
+    col_main, col_settings = st.columns([3, 1])
+    
+    with col_settings:
+        st.subheader("🎨 Filtreler")
+        
+        filter_type = st.radio(
+            "Filtre Seçin:",
+            ["Normal", "Gri Tonlama", "Kenar Tespiti", "Keskinleştirme", "Histogram Eşitleştir"],
+            index=0
+        )
+    
+    with col_main:
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        
+        with col_btn1:
+            start_stream = st.button("▶️ Canlı Akışı Başlat", use_container_width=True)
+        
+        with col_btn2:
+            stop_stream = st.button("⏹️ Akışı Durdur", use_container_width=True)
+        
+        with col_btn3:
+            capture_snapshot = st.button("📸 Snapshot Al", use_container_width=True)
+        
+        stream_placeholder = st.empty()
+        
+        if start_stream and not st.session_state.esp32_streaming:
+            with st.spinner("ESP32Cam'e bağlanılıyor..."):
+                try:
+                    st.session_state.esp32_handler = ESP32CamHandler(esp32_ip, esp32_port)
+                    
+                    if st.session_state.esp32_handler.is_connected:
+                        st.session_state.esp32_handler.basla_stream()
+                        st.session_state.esp32_streaming = True
+                        st.success("✅ Canlı akış başlatıldı!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("❌ ESP32Cam'e bağlanılamadı!")
+                except Exception as e:
+                    st.error(f"❌ Hata: {e}")
+        
+        if stop_stream and st.session_state.esp32_streaming:
+            if st.session_state.esp32_handler:
+                st.session_state.esp32_handler.durdur_stream()
+            st.session_state.esp32_streaming = False
+            st.info("⏹️ Akış durduruldu")
+            time.sleep(0.3)
+            st.rerun()
+        
+        if st.session_state.esp32_streaming and st.session_state.esp32_handler:
+            handler = st.session_state.esp32_handler
+            
+            frame_update_interval = st.slider(
+                "Frame Güncelleme (ms):",
+                min_value=100,
+                max_value=1000,
+                value=500,
+                step=100
+            )
+            
+            if 'sistem' not in st.session_state:
+                st.session_state.sistem = MakineParcaTanima()
+            
+            sistem = st.session_state.sistem
+            
+            yolo_model_path = "runs/detect/train/weights/best.pt"
+            has_yolo_model = Path(yolo_model_path).exists() and YOLO_KULLANILABILIR
+            
+            col_proc1, col_proc2, col_proc3 = st.columns(3)
+            
+            with col_proc1:
+                detect_objects = st.checkbox("🎯 YOLO Nesne Tespiti", value=has_yolo_model)
+            
+            with col_proc2:
+                show_stats = st.checkbox("📊 İstatistik Göster", value=True)
+            
+            with col_proc3:
+                record_frames = st.checkbox("💾 Frame'ler Kaydedilsin", value=False)
+            
+            st.divider()
+            
+            frame_count = 0
+            start_time = time.time()
+            detections_log = []
+            
+            while st.session_state.esp32_streaming and st.session_state.esp32_handler:
+                try:
+                    frame = handler.son_frame_al()
+                    
+                    if frame is None:
+                        time.sleep(0.1)
+                        continue
+                    
+                    display_frame = frame.copy()
+                    display_frame = FrameProcessor.boyutlandir(
+                        display_frame,
+                        width=ESP32_GORUNTU_GENISLIK,
+                        height=ESP32_GORUNTU_YUKSEKLIK
+                    )
+                    
+                    if filter_type == "Gri Tonlama":
+                        display_frame = FrameProcessor.gri_tonlama(display_frame)
+                        display_frame = cv2.cvtColor(display_frame, cv2.COLOR_GRAY2BGR)
+                    elif filter_type == "Kenar Tespiti":
+                        display_frame = FrameProcessor.kenar_tespit(display_frame)
+                        display_frame = cv2.cvtColor(display_frame, cv2.COLOR_GRAY2BGR)
+                    elif filter_type == "Keskinleştirme":
+                        display_frame = FrameProcessor.keskinlestir(display_frame)
+                    elif filter_type == "Histogram Eşitleştir":
+                        display_frame = FrameProcessor.histogram_esitlestir(display_frame)
+                    
+                    detection_info = None
+                    if detect_objects and has_yolo_model:
+                        try:
+                            temp_path = "/tmp/esp32_frame.jpg"
+                            cv2.imwrite(temp_path, display_frame)
+                            
+                            from ultralytics import YOLO
+                            model = YOLO(yolo_model_path)
+                            results = model(temp_path, verbose=False, conf=0.5)
+                            
+                            if results and len(results) > 0:
+                                result = results[0]
+                                
+                                for box in result.boxes:
+                                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                                    conf = box.conf[0].cpu().numpy()
+                                    cls = int(box.cls[0].cpu().numpy())
+                                    
+                                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                                    class_name = result.names[cls] if cls in result.names else f"Class {cls}"
+                                    
+                                    cv2.rectangle(display_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                                    label_text = f"{class_name}: {conf:.2f}"
+                                    cv2.putText(
+                                        display_frame,
+                                        label_text,
+                                        (x1, y1 - 10),
+                                        cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.7,
+                                        (0, 255, 0),
+                                        2
+                                    )
+                                    
+                                    detections_log.append({
+                                        "zaman": time.time(),
+                                        "guven": float(conf),
+                                        "sinif": class_name
+                                    })
+                            
+                            if len(results[0].boxes) > 0:
+                                detection_info = f"🎯 {len(results[0].boxes)} nesne tespit edildi"
+                        except Exception as e:
+                            detection_info = f"❌ Tespit hatası: {str(e)[:50]}"
+                    
+                    frame_count += 1
+                    elapsed = time.time() - start_time
+                    fps = frame_count / elapsed if elapsed > 0 else 0
+                    
+                    if show_stats:
+                        stats_text = f"FPS: {fps:.1f} | Frame: {frame_count}"
+                        cv2.putText(
+                            display_frame,
+                            stats_text,
+                            (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (0, 255, 0),
+                            2
+                        )
+                    
+                    if detection_info:
+                        cv2.putText(
+                            display_frame,
+                            detection_info,
+                            (10, 70),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (0, 255, 255),
+                            2
+                        )
+                    
+                    display_frame_rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
+                    stream_placeholder.image(
+                        display_frame_rgb,
+                        width=ESP32_GORUNTU_GENISLIK,
+                        caption=f"Canlı Görüntü ({ESP32_GORUNTU_GENISLIK}x{ESP32_GORUNTU_YUKSEKLIK})"
+                    )
+                    
+                    if record_frames:
+                        st.session_state.esp32_frames.append(display_frame.copy())
+                    
+                    time.sleep(frame_update_interval / 1000.0)
+                    
+                except KeyboardInterrupt:
+                    break
+                except Exception as e:
+                    st.error(f"❌ Akış hatası: {e}")
+                    break
+            
+            if st.session_state.esp32_handler:
+                st.session_state.esp32_handler.kapat()
+            st.session_state.esp32_streaming = False
+        
+        else:
+            with stream_placeholder.container():
+                st.info("📹 Canlı akış başlatmak için ▶️ düğmesini tıklayın")
+                placeholder_img = Image.new(
+                    'RGB',
+                    (ESP32_GORUNTU_GENISLIK, ESP32_GORUNTU_YUKSEKLIK),
+                    color=(40, 40, 40)
+                )
+                st.image(
+                    placeholder_img,
+                    width=ESP32_GORUNTU_GENISLIK,
+                    caption=f"Canlı Görüntü ({ESP32_GORUNTU_GENISLIK}x{ESP32_GORUNTU_YUKSEKLIK})"
+                )
+        
+        if capture_snapshot and st.session_state.esp32_handler:
+            with st.spinner("Snapshot alınıyor..."):
+                snapshot = st.session_state.esp32_handler.snapshot_al()
+                
+                if snapshot is not None:
+                    st.success("✅ Snapshot alındı!")
+                    
+                    snapshot_resized = cv2.resize(
+                        snapshot,
+                        (ESP32_GORUNTU_GENISLIK, ESP32_GORUNTU_YUKSEKLIK)
+                    )
+                    snapshot_rgb = cv2.cvtColor(snapshot_resized, cv2.COLOR_BGR2RGB)
+                    st.image(
+                        snapshot_rgb,
+                        width=ESP32_GORUNTU_GENISLIK,
+                        caption=f"Snapshot ({ESP32_GORUNTU_GENISLIK}x{ESP32_GORUNTU_YUKSEKLIK})"
+                    )
+                    
+                    _, buffer = cv2.imencode('.jpg', snapshot)
+                    jpg_data = buffer.tobytes()
+                    
+                    st.download_button(
+                        label="📥 Snapshot İndir",
+                        data=jpg_data,
+                        file_name=f"esp32_snapshot_{int(time.time())}.jpg",
+                        mime="image/jpeg"
+                    )
+    
+    # Kamera kontrol paneli
+    if st.session_state.esp32_handler and st.session_state.esp32_streaming:
+        with st.expander("🎨 Kamera Kontrolleri"):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                brightness = st.slider("Parlaklık:", -2, 2, 0)
+                if st.button("Uygula", key="brightness"):
+                    st.session_state.esp32_handler.parlaklik_ayarla(brightness)
+                    st.success("✅ Parlaklık ayarlandı")
+            
+            with col2:
+                contrast = st.slider("Kontrast:", -2, 2, 0)
+                if st.button("Uygula", key="contrast"):
+                    st.session_state.esp32_handler.kontrast_ayarla(contrast)
+                    st.success("✅ Kontrast ayarlandı")
+            
+            with col3:
+                saturation = st.slider("Doygunluk:", -2, 2, 0)
+                if st.button("Uygula", key="saturation"):
+                    st.session_state.esp32_handler.doygunluk_ayarla(saturation)
+                    st.success("✅ Doygunluk ayarlandı")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("🔄 Dikey Çevir", use_container_width=True):
+                    st.session_state.esp32_handler.cevir_dikey(True)
+                    st.success("✅ Uygulandı")
+            
+            with col2:
+                if st.button("↔️ Yatay Çevir", use_container_width=True):
+                    st.session_state.esp32_handler.cevir_yatay(True)
+                    st.success("✅ Uygulandı")
+            
+            with col3:
+                if st.button("🌙 Gece Modu", use_container_width=True):
+                    st.session_state.esp32_handler.parlaklik_ayarla(2)
+                    st.session_state.esp32_handler.kontrast_ayarla(1)
+
+
 def main():
     """Ana Streamlit uygulaması"""
     st.set_page_config(
@@ -617,11 +992,15 @@ def main():
         st.title("🔧 Menü")
         sayfa = st.radio(
             "Sayfa Seçin:",
-            ["🏠 Ana Sayfa - Parça Tanıma", "📊 Model Performans Testi"],
+            ["🏠 Ana Sayfa - Parça Tanıma", "� ESP32Cam Canlı Kamera", "📊 Model Performans Testi"],
             index=0
         )
     
     # Sayfa yönlendirmesi
+    if "ESP32Cam" in sayfa:
+        esp32_sayfasi()
+        return
+    
     if "Model Performans" in sayfa:
         performans_sayfasi()
         return
@@ -758,22 +1137,37 @@ def main():
         if uploaded_file is not None:
             # Görüntüyü yükle
             image = Image.open(uploaded_file)
-            st.image(image, caption="Yüklenen Görüntü", use_container_width=True)
+            # PIL Image'i RGB'ye dönüştür (format problemlerini önlemek için)
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            # Görüntüyü 720x560 standardında göster
+            img_array = np.array(image)
+            # OpenCV BGR formatını bekler, PIL RGB döndürür - BGR'ye çevir
+            if len(img_array.shape) == 3 and img_array.shape[2] == 3:
+                img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+            else:
+                img_bgr = img_array  # Zaten doğru formatta veya gri tonlama
+            img_resized = cv2.resize(img_bgr, (720, 560))
+            # Gösterim için RGB'ye geri çevir
+            if len(img_resized.shape) == 3 and img_resized.shape[2] == 3:
+                img_display = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+            else:
+                img_display = img_resized
+            st.image(img_display, caption="Yüklenen Görüntü (720x560)", use_container_width=True)
             
             # Analiz et butonu
             if st.button("🔍 Analiz Et", type="primary"):
                 with st.spinner("Görüntü analiz ediliyor..."):
-                    # Görüntüyü geçici olarak kaydet
+                    # Görüntüyü geçici olarak kaydet (resize edilmiş versyon)
                     temp_path = "temp_upload.jpg"
-                    image.save(temp_path)
+                    cv2.imwrite(temp_path, img_resized)
                     
-                    # Görüntü işleme
-                    processed = sistem.goruntu_onisleme(image)
-                    ozellikler = sistem.ozellik_cikarma(image)
+                    # Görüntü işleme (numpy array üzerinde)
+                    processed = sistem.goruntu_onisleme(img_resized)
+                    ozellikler = sistem.ozellik_cikarma(img_resized)
                     
                     # Şekil analizi yap
                     from image_utils import GorselIslemci
-                    import cv2
                     img_cv = cv2.imread(temp_path)
                     sekiller = GorselIslemci.sekil_analizi(img_cv)
                     
@@ -898,7 +1292,6 @@ def main():
             # YOLO tespit sonucu görselini göster
             if yontem_bilgi.get('sonuc_goruntu') is not None:
                 try:
-                    import cv2
                     st.subheader("🎯 YOLO Tespit Sonucu")
                     sonuc_img = yontem_bilgi['sonuc_goruntu']
                     # BGR to RGB dönüşümü

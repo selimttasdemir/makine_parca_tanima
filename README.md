@@ -1,156 +1,201 @@
-# 🔧 Makine Parçası Tanıma ve Tespit Sistemi
+# Makine Parçası Tanıma ve Tespit Sistemi
 
-Görüntü işleme, derin öğrenme (ResNet50) ve YOLO tabanlı nesne tespiti ile makine parçalarını sınıflandıran ve tespit eden kapsamlı Python projesi.
+Görüntü işleme, derin öğrenme ve YOLO tabanlı nesne tespiti ile makine parçalarını tanıyan Python projesi. Sistem; tek görsel analizi, YOLO ile çoklu nesne tespiti, ResNet50 sınıflandırma, feature matching, hibrit tanıma ve ESP32Cam üzerinden canlı kamera desteği sunar.
 
-## 📋 İçindekiler
-- [Hızlı Başlangıç](#-hızlı-başlangıç)
-- [Proje Yapısı](#-proje-yapısı)
-- [Kurulum](#-kurulum)
-- [Veri Toplama](#-veri-toplama-ve-hazırlık)
-- [Model Eğitimi](#-model-eğitimi)
-  - [ResNet50 Sınıflandırma](#1-resnet50-sınıflandırma)
-  - [YOLO Nesne Tespiti](#2-yolo-nesne-tespiti)
-- [Web Uygulaması](#-web-uygulaması-kullanımı)
-- [Model Performans Testi](#-model-performans-testi)
-- [GPU ve Performans](#-gpu-bellek-yönetimi)
-- [Sorun Giderme](#-sorun-giderme)
+![Makine parçası tanıma demosu](makine_parca_tanima.gif)
 
-## 🚀 Hızlı Başlangıç
+## İçindekiler
 
-### Temel Kurulum
+- [Özellikler](#özellikler)
+- [Demo ve Ekran Görüntüleri](#demo-ve-ekran-görüntüleri)
+- [Hızlı Başlangıç](#hızlı-başlangıç)
+- [Proje Yapısı](#proje-yapısı)
+- [Veri Hazırlama](#veri-hazırlama)
+- [Model Eğitimi](#model-eğitimi)
+- [Web Uygulaması](#web-uygulaması)
+- [ESP32Cam Canlı Kamera](#esp32cam-canlı-kamera)
+- [Test ve Değerlendirme](#test-ve-değerlendirme)
+- [Sorun Giderme](#sorun-giderme)
+- [Lisans](#lisans)
+
+## Özellikler
+
+- YOLO ile çoklu makine parçası tespiti ve bounding box gösterimi.
+- ResNet50 transfer learning ile tek nesne sınıflandırma.
+- SIFT, histogram ve Hu moment tabanlı feature matching.
+- Hibrit mod ile deep learning ve feature matching sonuçlarını birlikte kullanma.
+- Streamlit web arayüzü ile görsel yükleme, örnek seçme ve analiz.
+- Model performans testi, sınıf bazlı doğruluk ve sonuç kaydetme.
+- ESP32Cam ile canlı MJPEG akışı, filtreleme, snapshot ve gerçek zamanlı YOLO tespiti.
+
+Desteklenen temel sınıflar:
+
+| Türkçe | Model Etiketi | Açıklama |
+|---|---|---|
+| Rulman | Bearing | Döner sistemlerde yataklama elemanı |
+| Vida / Civata | Bolt | Bağlantı elemanı |
+| Dişli | Gear | Güç ve hareket aktarma elemanı |
+| Somun | Nut | Vidalı bağlantı elemanı |
+| Kayış | Belt | Hareket aktarımı |
+| Krank mili | Crankshaft | Dönel hareket elemanı |
+| Pim | Pin | Konumlama ve sabitleme elemanı |
+| Piston | Piston | Motor ve kompresör parçası |
+| Yay | Spring | Esnek mekanik eleman |
+
+## Demo ve Ekran Görüntüleri
+
+### Web Arayüzü ile YOLO Analizi
+
+![Görsel yükleme ve YOLO analiz sonucu](<Ekran Görüntüsü - 2026-06-21 18-19-15.png>)
+
+Yüklenen dişli görseli YOLO modeliyle analiz edilir, parça sınıfı ve güven skoru arayüzde gösterilir.
+
+### Parça Bilgisi ve Güven Skoru
+
+![Parça tanımı ve güven skoru](<Ekran Görüntüsü - 2026-06-21 18-19-41.png>)
+
+Tanıma sonucundan sonra parça açıklaması, kullanım alanları, teknik özellikler ve alt tür bilgileri görüntülenir.
+
+### Görüntü İşleme Detayları
+
+![Gri tonlama ve kenar tespiti](<Ekran Görüntüsü - 2026-06-21 18-19-51.png>)
+
+Gri tonlama, kenar tespiti ve şekil analizi çıktıları görsel işleme detaylarında incelenebilir.
+
+### ESP32Cam Canlı Tespit
+
+![ESP32Cam canlı YOLO tespit ekranı](<Ekran Görüntüsü - 2026-06-21 18-17-34.png>)
+
+ESP32Cam akışında YOLO modeli gerçek zamanlı nesne tespiti yapar ve sonuçları canlı görüntü üzerine çizer.
+
+### Dataset İstatistikleri
+
+![Dataset istatistikleri](dataset_statistics.png)
+
+`check_dataset.py` çalıştırıldığında eğitim, doğrulama ve test verilerinin sınıf dağılımı `dataset_statistics.png` olarak kaydedilir.
+
+## Hızlı Başlangıç
+
+### Kurulum
+
 ```bash
-# Gerekli paketleri kur
 pip install -r requirements.txt
-
-# Klasör yapısını oluştur
-chmod +x setup_folders.sh && ./setup_folders.sh
-
-# Web uygulamasını başlat
-./web_test.sh
-# veya
-streamlit run app.py
-```
-
-### Hızlı Eğitim
-```bash
-# 1. Veri topla
-python download_images.py --classes vida somun rulman disli --per-class 40 --out training_data
-
-# 2. Sınıflandırma modeli eğit
-python train_model.py --mode train --data_dir ./training_data --epochs 25
-
-# 3. YOLO modeli eğit (hızlı)
-./hizli_egitim.sh
-```
-
-## 📁 Proje Yapısı
-```
-makine_parca_tanima/
-├── app.py                      # Streamlit web arayüzü (ana uygulama)
-├── train_model.py              # ResNet50 transfer learning eğitimi
-├── hybrid_detector.py          # DL + feature matching hibrit sistem
-├── feature_matcher.py          # SIFT/histogram/hu tabanlı hızlı tanıma
-├── download_images.py          # DuckDuckGo ile görsel indirme
-├── train_yolo_model.py         # YOLOv8 eğitim/val/test/predict/export
-├── test_dogruluk.py            # Model doğruluk testi
-├── hizli_egitim.sh             # YOLO hızlı eğitim scripti
-├── web_test.sh                 # Web uygulaması başlatma scripti
-├── web_durum_kontrol.sh        # Sistem durum kontrolü
-├── mech_parts_data.yaml        # YOLO dataset tanımı
-├── requirements.txt            # Gerekli Python paketleri
-├── training_data/              # Sınıflandırma verisi (klasör başına sınıf)
-│   ├── civata/
-│   ├── disli/
-│   ├── kayis/
-│   ├── krank/
-│   ├── pim/
-│   ├── piston/
-│   ├── rulman/
-│   ├── somun/
-│   ├── vida/
-│   └── yay/
-├── referans_gorseller/         # Feature matching için referans görseller
-├── train/                      # YOLO eğitim verisi
-│   ├── images/
-│   └── labels/
-├── val/                        # YOLO doğrulama verisi
-│   ├── images/
-│   └── labels/
-├── test/                       # YOLO test verisi
-│   ├── images/
-│   └── labels/
-└── runs/                       # Eğitim sonuçları ve modeller
-    └── detect/
-        └── train/
-            └── weights/
-                └── best.pt     # Eğitilmiş YOLO modeli
-```
-
-## 📦 Kurulum
-
-### Gereksinimler
-- Python 3.8+
-- CUDA (GPU kullanımı için önerilir)
-- 8GB+ RAM (16GB önerilir)
-
-### Paket Kurulumu
-```bash
-# Tüm gerekli paketleri kur
-pip install -r requirements.txt
-
-# Manuel kurulum (gerekirse)
-pip install torch torchvision
-pip install ultralytics opencv-python
-pip install streamlit pillow numpy pandas
-pip install scikit-learn matplotlib seaborn
-```
-
-### Klasör Yapısını Oluşturma
-```bash
 chmod +x setup_folders.sh
 ./setup_folders.sh
 ```
 
-## 📥 Veri Toplama ve Hazırlık
+### Web Uygulamasını Başlatma
 
-### Otomatik Veri İndirme
 ```bash
-# Birden fazla sınıf için otomatik indirme
-python download_images.py --classes vida somun rulman disli piston --per-class 40 --out training_data
+./web_test.sh
+```
 
-# Özel parametrelerle
+Alternatif olarak:
+
+```bash
+streamlit run app.py
+```
+
+Uygulama varsayılan olarak `http://localhost:8501` adresinde açılır.
+
+### Hızlı Eğitim Akışı
+
+```bash
+python download_images.py --classes vida somun rulman disli --per-class 40 --out training_data
+python train_model.py --mode train --data_dir ./training_data --epochs 25
+./hizli_egitim.sh
+```
+
+## Proje Yapısı
+
+```text
+makine_parca_tanima/
+├── app.py                    # Streamlit web arayüzü
+├── train_model.py            # ResNet50 sınıflandırma eğitimi
+├── train_yolo_model.py       # YOLO train/val/test/predict/export aracı
+├── hybrid_detector.py        # Hibrit tanıma sistemi
+├── feature_matcher.py        # Referans tabanlı feature matching
+├── esp32cam_handler.py       # ESP32Cam bağlantı ve frame işleme modülü
+├── test_esp32cam.py          # ESP32Cam komut satırı test aracı
+├── test_dogruluk.py          # YOLO doğruluk testi
+├── check_dataset.py          # YOLO dataset kontrolü ve istatistik üretimi
+├── check_training_data.py    # Sınıflandırma veri kontrolü
+├── download_images.py        # Görsel indirme aracı
+├── mech_parts_data.yaml      # YOLO dataset tanımı
+├── requirements.txt          # Python bağımlılıkları
+├── training_data/            # ResNet50 sınıflandırma verisi
+├── train/                    # YOLO eğitim verisi
+├── val/                      # YOLO doğrulama verisi
+├── test/                     # YOLO test verisi
+└── runs/                     # Eğitim çıktıları ve model ağırlıkları
+```
+
+## Veri Hazırlama
+
+### Otomatik Görsel İndirme
+
+```bash
+python download_images.py --classes vida somun rulman disli piston --per-class 40 --out training_data
 python download_images.py --classes civata kayis --per-class 100 --out ./my_data
 ```
 
-### Manuel Veri Toplama
-Her sınıf için minimum 10-15 görsel önerilir:
-```bash
+### Sınıflandırma Verisi
+
+ResNet50 eğitimi için klasör adı sınıf adı olarak kullanılır:
+
+```text
 training_data/
-  ├── vida/        # 10+ görsel
-  ├── somun/       # 10+ görsel
-  ├── rulman/      # 10+ görsel
-  └── disli/       # 10+ görsel
+├── vida/
+├── somun/
+├── rulman/
+├── disli/
+├── kayis/
+└── yay/
 ```
 
-### Veri Kontrolü
-```bash
-# Eğitim verisini kontrol et
-python check_training_data.py
+Her sınıf için en az 10-15 görsel ile başlanabilir. Daha kararlı sonuçlar için sınıf başına 50+ görsel önerilir.
 
-# YOLO dataset kontrolü
+### YOLO Dataset Yapısı
+
+`mech_parts_data.yaml` dosyası YOLO veri yollarını ve sınıfları tanımlar:
+
+```yaml
+train: ./train/images
+val: ./val/images
+test: ./test/images
+
+nc: 4
+names: ['Bearing', 'Bolt', 'Gear', 'Nut']
+```
+
+YOLO etiket formatı:
+
+```text
+class_id center_x center_y width height
+```
+
+Tüm koordinatlar normalize edilmelidir.
+
+### Veri Kontrolü
+
+```bash
+python check_training_data.py
 python check_dataset.py
 ```
 
-## 🧠 Model Eğitimi
+## Model Eğitimi
 
-### 1. ResNet50 Sınıflandırma
+### ResNet50 Sınıflandırma
 
-#### Temel Eğitim
+Temel eğitim:
+
 ```bash
-# Varsayılan parametrelerle eğitim
 python train_model.py --mode train --data_dir ./training_data --epochs 25
+```
 
-# Gelişmiş parametrelerle
+Gelişmiş parametrelerle eğitim:
+
+```bash
 python train_model.py \
   --mode train \
   --data_dir ./training_data \
@@ -160,48 +205,39 @@ python train_model.py \
   --patience 10
 ```
 
-**Minimum Gereksinimler:**
-- En az 2 farklı sınıf
-- Toplam 2+ görüntü
-- Otomatik veri kontrolü entegre
+Tek görsel testi:
 
-#### Model Testi
 ```bash
-# Tek görsel testi
 python train_model.py --mode test --model_path best_model.pth --test_image ./test.jpg
-
-# Test seti üzerinde değerlendirme
-python train_model.py --mode evaluate --model_path best_model.pth --test_dir ./test_images
 ```
 
-#### Python Kodu ile Kullanım
+Python API örneği:
+
 ```python
 from hybrid_detector import HibritTanima
 
-# Model yükle
 sistem = HibritTanima(
-    model_path='best_model.pth',
-    referans_klasor='./referans_gorseller',
-    mod='auto'  # veya 'dl', 'feature'
+    model_path="best_model.pth",
+    referans_klasor="./referans_gorseller",
+    mod="auto",
 )
 
-# Tahmin yap
-sonuc = sistem.tanima_yap('test.jpg')
+sonuc = sistem.tanima_yap("test.jpg")
 print(f"Parça: {sonuc['parca']}")
 print(f"Güven: {sonuc['guven']:.2%}")
 ```
 
-### 2. YOLO Nesne Tespiti
+### YOLO Nesne Tespiti
 
-#### Hızlı Eğitim (Önerilen)
+İnteraktif hızlı eğitim:
+
 ```bash
-# İnteraktif script (model boyutu, epoch, batch otomatik seçilir)
 ./hizli_egitim.sh
 ```
 
-#### Manuel Eğitim
+Manuel eğitim:
+
 ```bash
-# Nano model (en hızlı, 8GB GPU için ideal)
 python train_yolo_model.py \
   --mode train \
   --size n \
@@ -209,16 +245,11 @@ python train_yolo_model.py \
   --batch 16 \
   --imgsz 640 \
   --data mech_parts_data.yaml
+```
 
-# Medium model (daha yüksek doğruluk)
-python train_yolo_model.py \
-  --mode train \
-  --size m \
-  --epochs 150 \
-  --batch 8 \
-  --imgsz 640
+CPU eğitimi:
 
-# CPU eğitimi (GPU yoksa)
+```bash
 python train_yolo_model.py \
   --mode train \
   --size n \
@@ -227,537 +258,298 @@ python train_yolo_model.py \
   --device cpu
 ```
 
-#### Model Boyutları
-| Model | Hız | Doğruluk | GPU Bellek | Önerilen Batch |
-|-------|-----|----------|------------|----------------|
-| YOLOv8n | ⚡⚡⚡⚡⚡ | ⭐⭐⭐ | ~2GB | 16 |
-| YOLOv8s | ⚡⚡⚡⚡ | ⭐⭐⭐⭐ | ~4GB | 12 |
-| YOLOv8m | ⚡⚡⚡ | ⭐⭐⭐⭐⭐ | ~6GB | 8 |
-| YOLOv8l | ⚡⚡ | ⭐⭐⭐⭐⭐ | ~8GB | 4 |
-| YOLOv8x | ⚡ | ⭐⭐⭐⭐⭐⭐ | ~12GB | 2 |
+Model işlemleri:
 
-#### Doğrulama ve Test
 ```bash
-# Doğrulama (validation)
 python train_yolo_model.py --mode val
-
-# Test seti değerlendirme
 python train_yolo_model.py --mode test
-
-# Tahmin (prediction)
-python train_yolo_model.py \
-  --mode predict \
-  --source test/images/ \
-  --conf 0.25
-
-# Model export (ONNX, TensorRT vb.)
+python train_yolo_model.py --mode predict --source test/images/ --conf 0.25
 python train_yolo_model.py --mode export --format onnx
 ```
 
-#### YOLO Dataset Yapısı
-```yaml
-# mech_parts_data.yaml
-train: ./train/images
-val: ./val/images
-test: ./test/images
+Model boyutu seçimi:
 
-nc: 4  # Sınıf sayısı
-names: ['Bearing', 'Bolt', 'Gear', 'Nut']  # Sınıf isimleri
-```
+| Model | Hız | Doğruluk | Yaklaşık GPU Belleği | Önerilen Batch |
+|---|---:|---:|---:|---:|
+| YOLOv8n | Çok yüksek | Orta | 2 GB | 16 |
+| YOLOv8s | Yüksek | İyi | 4 GB | 12 |
+| YOLOv8m | Orta | Yüksek | 6 GB | 8 |
+| YOLOv8l | Düşük | Çok yüksek | 8 GB | 4 |
+| YOLOv8x | Çok düşük | En yüksek | 12 GB | 2 |
 
-**Label formatı (YOLO format):**
-```
-# train/labels/image1.txt
-0 0.5 0.5 0.3 0.4  # class_id center_x center_y width height (normalize)
-```
+## Web Uygulaması
 
-## 🌐 Web Uygulaması Kullanımı
+Web arayüzünde üç ana sayfa bulunur:
 
-### Başlatma
+- Ana Sayfa - Parça Tanıma
+- ESP32Cam Canlı Kamera
+- Model Performans Testi
+
+### Parça Tanıma Akışı
+
+1. Sol menüden tanıma yöntemini seçin.
+2. YOLO model yolunu kontrol edin: `runs/detect/train/weights/best.pt`.
+3. Bir görsel yükleyin veya örnek parça seçin.
+4. Analizi başlatın.
+5. Bounding box, güven skoru, parça bilgisi ve görüntü işleme detaylarını inceleyin.
+
+Kullanılabilir tanıma yöntemleri:
+
+| Yöntem | Kullanım |
+|---|---|
+| YOLO | Çoklu nesne tespiti ve üretim senaryoları |
+| Deep Learning | Tek nesne sınıflandırma |
+| Feature Matching | Referans görsellerle hızlı prototip |
+| Hibrit | DL ve feature matching sonuçlarını birlikte değerlendirme |
+
+### Güven Skoru Yorumu
+
+| Güven Skoru | Anlamı |
+|---|---|
+| 90%+ | Çok yüksek, güvenle kullanılabilir |
+| 80-90% | Yüksek, iyi tespit |
+| 70-80% | Kabul edilebilir |
+| 60-70% | Orta, manuel kontrol önerilir |
+| 50-60% | Düşük |
+| <50% | Güvenilmez |
+
+## ESP32Cam Canlı Kamera
+
+ESP32Cam desteği, yerel ağdaki ESP32Cam modülünden MJPEG akışı alır ve Streamlit arayüzünde canlı görüntü işler. YOLO modeli etkinse her frame üzerinde gerçek zamanlı parça tespiti yapılabilir.
+
+### Hazırlık
+
+ESP32Cam tarafında firmware yüklenmiş, WiFi bağlantısı yapılmış ve IP adresi biliniyor olmalıdır. Python tarafında gerekli paketler `requirements.txt` içinde yer alır:
+
 ```bash
-# Otomatik başlatma (önerilen)
-./web_test.sh
-
-# Manuel başlatma
-streamlit run app.py
-
-# Durum kontrolü
-./web_durum_kontrol.sh
+pip install -r requirements.txt
 ```
 
-Uygulama otomatik olarak tarayıcınızda açılacak: `http://localhost:8501`
+Ek olarak yalnızca ESP32Cam testleri için:
 
-### Ana Sayfa - Parça Tanıma
-
-#### 1. Tanıma Yöntemi Seçimi
-Sol kenar çubuğundan seçim yapın:
-- **🎯 YOLO (Eğitilmiş Model)** - En yüksek doğruluk, çoklu nesne tespiti
-- **🧠 Deep Learning (ResNet50)** - Tek nesne sınıflandırma
-- **🔍 Feature Matching** - Hızlı, referans tabanlı
-- **⚡ Hibrit (Otomatik)** - DL + Feature matching kombinasyonu
-
-#### 2. YOLO Kullanımı
-```
-Adım 1: YOLO Model Yolu
-  └─ runs/detect/train/weights/best.pt (varsayılan)
-
-Adım 2: Tanıma Yöntemi
-  └─ 🎯 YOLO seçin
-
-Adım 3: Fotoğraf Yükle
-  └─ Browse files → Görsel seç
-
-Adım 4: Analiz Et
-  └─ 🔍 Analiz Et butonuna tıkla
-
-Adım 5: Sonuçları İncele
-  ├─ Bounding box'lı görsel
-  ├─ Tespit edilen nesneler listesi
-  ├─ Güven skorları
-  └─ Parça bilgileri
-```
-
-#### 3. Sonuçları Temizleme
-Yeni bir analiz yapmadan önce:
 ```bash
-🗑️ Sonuçları Temizle  # Butona tıklayın
+pip install requests opencv-python pillow
 ```
 
-### Örnek Kullanım Senaryoları
+### Streamlit Üzerinden Kullanım
 
-#### Senaryo 1: Rulman Tespiti
-```
-✅ YOLO seç
-✅ Rulman fotoğrafı yükle
-✅ Analiz Et
+1. `streamlit run app.py` komutuyla uygulamayı başlatın.
+2. Sol menüden `ESP32Cam Canlı Kamera` sayfasını açın.
+3. ESP32 IP adresini girin, örneğin `192.168.1.100`.
+4. Portu girin, varsayılan değer `80`.
+5. Bağlantı kontrolü yapın.
+6. Canlı akışı başlatın.
+7. İsteğe bağlı olarak YOLO tespiti, istatistik ve frame kaydetme seçeneklerini etkinleştirin.
 
-Sonuç:
-🎯 YOLO Tespit Sonucu
-   [Bearing 0.92]
-   
-🔍 Tespit Edilen Nesneler:
-   1. Bearing → Rulman 🎯 %92.3
+### ESP32Cam Özellikleri
 
-✅ Tespit Edilen Parça: Rulman
-🟢 %92.3 Güven
-```
+- Canlı MJPEG video akışı.
+- YOLO ile gerçek zamanlı nesne tespiti.
+- FPS ve frame sayacı.
+- Snapshot alma ve indirme.
+- Frame kaydı.
+- Normal, gri tonlama, kenar tespiti, keskinleştirme ve histogram eşitleştirme filtreleri.
+- Parlaklık, kontrast, doygunluk, dikey/yatay çevirme ve gece modu kontrolleri.
 
-#### Senaryo 2: Çoklu Nesne Tespiti
-```
-Fotoğrafta: 2 vida, 1 somun
+### Kamera Ayarı Önerileri
 
-Sonuç:
-🎯 YOLO Tespit Sonucu
-   [Bolt 0.89] [Bolt 0.85]
-   [Nut 0.91]
+| Senaryo | Öneri |
+|---|---|
+| Canlı tespit | Frame güncelleme 500 ms, filtre Normal, YOLO açık |
+| İzleme | Frame güncelleme 1000 ms, YOLO kapalı |
+| Kayıt | Frame güncelleme 200 ms, frame kaydı açık |
+| Gece ortamı | Parlaklık +2, kontrast +1, doygunluk -1 |
 
-🔍 Tespit Edilen Tüm Nesneler:
-   1. Nut → Somun 🎯 %91.2
-   2. Bolt → Vida 🎯 %89.3
-   3. Bolt → Vida 🎯 %85.1
-```
+### Komut Satırı Test Aracı
 
-### Güven Skoru Yorumlama
-
-| Güven Skoru | Anlamı | Durum |
-|-------------|--------|-------|
-| **90%+** | 🎯 Çok Yüksek | Güvenle kullanılabilir |
-| **80-90%** | ✅ Yüksek | İyi tespit |
-| **70-80%** | 👍 İyi | Kabul edilebilir |
-| **60-70%** | ⚠️ Orta | Dikkatli kullanın |
-| **50-60%** | ⚠️ Düşük | Manuel kontrol gerekli |
-| **<50%** | ❌ Çok Düşük | Güvenilmez |
-
-### Bounding Box Özellikleri
-- Her sınıf için farklı renk
-- Sınıf adı + güven skoru etiketi
-- Çoklu nesne desteği
-- Otomatik güven eşiği filtreleme (%25)
-
-## 📊 Model Performans Testi
-
-### Web Arayüzü ile Test
-
-#### Adım 1: Test Sayfasına Git
-Sol menüden **"📊 Model Performans Testi"** seçin
-
-#### Adım 2: Test Ayarları
-```
-Model Yolu: runs/detect/train/weights/best.pt
-Test Görüntü Sayısı: 50 (0 = hepsi)
-Test Klasörü: test
+```bash
+python3 test_esp32cam.py -i 192.168.1.100 test-connection
+python3 test_esp32cam.py -i 192.168.1.100 snapshot -o test.jpg
+python3 test_esp32cam.py -i 192.168.1.100 stream -d 30
+python3 test_esp32cam.py -i 192.168.1.100 stream -f KeyarTespiti -d 20
+python3 test_esp32cam.py -i 192.168.1.100 camera-settings
 ```
 
-#### Adım 3: Testi Başlat
-**"🧪 Testi Başlat"** butonuna tıklayın
+### Python API Örneği
 
-#### Adım 4: Sonuçları İncele
-- ✅ Genel doğruluk oranı
-- 📊 Sınıf bazında performans
-- ❌ Yanlış tahmin örnekleri
-- 📈 İnteraktif grafikler
+```python
+from esp32cam_handler import ESP32CamHandler, FrameProcessor
 
-#### Adım 5: Sonuçları Kaydet
+esp32 = ESP32CamHandler("192.168.1.100", port=80)
+
+if esp32.is_connected:
+    esp32.basla_stream()
+    frame = esp32.son_frame_al()
+
+    if frame is not None:
+        gray = FrameProcessor.gri_tonlama(frame)
+        edges = FrameProcessor.kenar_tespit(frame)
+
+    esp32.durdur_stream()
+    esp32.kapat()
 ```
-💾 Sonuçları Kaydet (JSON)
-  └─ 📥 JSON Dosyasını İndir
+
+### Mimari
+
+```text
+ESP32Cam
+  -> HTTP/MJPEG
+esp32cam_handler.py
+  -> Threading ve frame buffer
+app.py
+  -> OpenCV + YOLO + Streamlit
+Tespit sonuçları
 ```
 
-### Komut Satırı ile Test
+### Bilinen Sınırlamalar ve Güvenlik
 
-#### Tam Test (Tüm Görüntüler)
+- Kararlı WiFi bağlantısı gerekir.
+- Yüksek çözünürlük ve düşük frame aralığı bant genişliği tüketimini artırır.
+- WiFi gecikmesi genellikle 100-300 ms aralığındadır.
+- PSRAM'li ESP32Cam modelleri daha kararlı çalışır.
+- Üretim ortamında HTTPS ve yerel ağ izolasyonu önerilir.
+- Modem üzerinden port yönlendirmesi yapılmamalıdır.
+
+### Sonraki Adımlar
+
+- Video kaydı.
+- WebRTC ile düşük gecikmeli yayın.
+- Çoklu kamera desteği.
+- Cloud upload.
+- Mobil uygulama entegrasyonu.
+
+## Test ve Değerlendirme
+
+### Web Arayüzü ile Model Testi
+
+1. Sol menüden `Model Performans Testi` sayfasını açın.
+2. Model yolunu girin: `runs/detect/train/weights/best.pt`.
+3. Test klasörünü seçin.
+4. Test edilecek görüntü sayısını belirleyin.
+5. Testi başlatın ve genel doğruluk, sınıf bazlı performans ve yanlış tahminleri inceleyin.
+
+### Komut Satırı Testleri
+
 ```bash
 python test_dogruluk.py --model runs/detect/train/weights/best.pt
-```
-
-#### Hızlı Test (İlk 50)
-```bash
 python test_dogruluk.py --model runs/detect/train/weights/best.pt --limit 50
+python test_dogruluk.py --model runs/detect/train/weights/best.pt --test test --limit 100 --save sonuclarim.json
 ```
 
-#### Özel Parametrelerle
+### Hızlı Sistem Kontrolleri
+
 ```bash
-python test_dogruluk.py \
-  --model runs/detect/train/weights/best.pt \
-  --test test \
-  --limit 100 \
-  --save sonuclarim.json
-```
-
-### Örnek Test Çıktısı
-```
-============================================================
-📈 TEST SONUÇLARI
-============================================================
-
-✅ Genel Doğruluk: %87.45
-   Doğru: 962/1100
-   Yanlış: 138/1100
-   Test Edilen Görüntü: 225
-
-📊 Sınıf Bazında Doğruluk:
-   Bearing (Rulman): %91.27 (251/275 doğru)
-   Gear (Dişli)    : %88.93 (257/289 doğru)
-   Bolt (Vida)     : %86.22 (269/312 doğru)
-   Nut (Somun)     : %82.59 (185/224 doğru)
-
-❌ Yanlış Tahmin Örnekleri (İlk 5):
-   1. image_252.jpg
-      Gerçek: Nut | Tahmin: Bolt (Güven: %73.2)
-   2. image_288.jpg
-      Gerçek: Gear | Tahmin: Bearing (Güven: %68.5)
-   ...
-
-💾 Detaylı sonuçlar kaydedildi: test_sonuclari.json
-```
-
-### Doğruluk Skorlarını Yorumlama
-
-| Genel Doğruluk | Değerlendirme | Öneriler |
-|----------------|---------------|----------|
-| **90%+** | 🎯 Mükemmel | Model üretime hazır |
-| **75-90%** | ✅ İyi | Kullanılabilir, iyileştirilebilir |
-| **60-75%** | ⚠️ Orta | Daha fazla eğitim gerekli |
-| **<60%** | ❌ Zayıf | Model/veri gözden geçirilmeli |
-
-### Performans İyileştirme İpuçları
-
-Bir sınıf düşük performans gösteriyorsa:
-1. **Daha Fazla Veri:** O sınıftan daha fazla örnek toplayın
-2. **Veri Artırma:** Augmentation teknikleri uygulayın
-3. **Etiket Kontrolü:** Yanlış etiketleri düzeltin
-4. **Uzun Eğitim:** Daha fazla epoch ile eğitin
-5. **Büyük Model:** YOLOv8n yerine YOLOv8m/l kullanın
-
-## ⚡ GPU Bellek Yönetimi
-
-### 8GB GPU için Öneriler
-```bash
-# YOLOv8n veya YOLOv8s kullanın
-python train_yolo_model.py --size n --batch 16 --imgsz 640
-
-# Bellek hatası alırsanız
-python train_yolo_model.py --size n --batch 8 --imgsz 640
-
-# Son çare
-python train_yolo_model.py --size n --batch 4 --imgsz 416
-```
-
-### Bellek Hatası Çözümleri
-
-#### CUDA Out of Memory
-1. **Batch size küçült:**
-   ```bash
-   --batch 8  # 16'dan 8'e
-   --batch 4  # 8'den 4'e
-   ```
-
-2. **Görüntü boyutu küçült:**
-   ```bash
-   --imgsz 416  # 640'tan 416'ya
-   ```
-
-3. **Daha küçük model:**
-   ```bash
-   --size n  # m veya l yerine
-   ```
-
-4. **CPU kullan (son çare):**
-   ```bash
-   --device cpu --batch 4
-   ```
-
-### GPU vs CPU Karşılaştırması
-
-| Özellik | GPU (8GB) | CPU |
-|---------|-----------|-----|
-| **Hız** | 100 epoch → 20-30 dk | 100 epoch → 5-8 saat |
-| **Batch Size** | 16 (n), 8 (m) | 4 |
-| **Önerilen** | YOLOv8n/s/m | YOLOv8n |
-| **Kullanım** | Üretim | Test/Geliştirme |
-
-### Hızlı Test Eğitimi
-```bash
-# GPU ile
-python train_yolo_model.py --mode train --size n --epochs 30 --batch 16 --imgsz 640
-
-# CPU ile
-python train_yolo_model.py --mode train --size n --epochs 10 --batch 4 --imgsz 416 --device cpu
-```
-
-## 🔧 Sorun Giderme
-
-### Veri İle İlgili Sorunlar
-
-#### Veri Eksik veya Boş
-```
-❌ Sorun: Eğitim verisi bulunamadı
-```
-**Çözüm:**
-```bash
-# Veri sayısını kontrol et
+./web_durum_kontrol.sh
+./test_model.sh
+python quick_test.py
+python check_dataset.py
 python check_training_data.py
-
-# Her sınıfa minimum 10 görüntü ekle
-# training_data/<sınıf_adı>/ klasörüne görsel ekleyin
 ```
 
-#### YOLO Dataset Hatası
-```
-❌ Sorun: train/images veya train/labels bulunamadı
-```
-**Çözüm:**
+### Doğruluk Yorumu
+
+| Genel Doğruluk | Değerlendirme | Öneri |
+|---|---|---|
+| 90%+ | Çok iyi | Üretime yakın |
+| 75-90% | İyi | Kullanılabilir, iyileştirilebilir |
+| 60-75% | Orta | Daha fazla veri ve eğitim gerekli |
+| <60% | Zayıf | Veri ve etiketler gözden geçirilmeli |
+
+## Sorun Giderme
+
+### Eğitim Verisi Bulunamadı
+
 ```bash
-# Klasör yapısını kontrol et
+python check_training_data.py
+```
+
+`training_data/<sinif_adi>/` klasörlerine görsel ekleyin. Her sınıf için en az 10 görsel önerilir.
+
+### YOLO Dataset Hatası
+
+```bash
 ls train/images/
 ls train/labels/
-
-# Dataset kontrolü
 python check_dataset.py
 ```
 
-### Model İle İlgili Sorunlar
+Görsel ve etiket dosyalarının aynı ada sahip olduğundan emin olun.
 
-#### Model Dosyası Bulunamadı
-```
-❌ Sorun: best_model.pth veya best.pt bulunamadı
-```
-**Çözüm:**
+### Model Dosyası Bulunamadı
+
+ResNet50 için:
+
 ```bash
-# ResNet50 için
 python train_model.py --mode train --epochs 25
+```
 
-# YOLO için
+YOLO için:
+
+```bash
 python train_yolo_model.py --mode train --epochs 50
 ```
 
-#### CPU'da Model Yükleme Hatası
-```
-❌ Sorun: CUDA model loading error on CPU
-```
-**Çözüm:**
-Model otomatik olarak CPU'ya maplenir. Eğer hata alırsanız:
-```python
-# train_model.py içinde
-model.load_state_dict(torch.load('best_model.pth', map_location='cpu'))
-```
+### CUDA Bellek Hatası
 
-### Web Uygulaması Sorunları
+Batch boyutunu veya görüntü boyutunu düşürün:
 
-#### Streamlit Bulunamadı
-```
-❌ streamlit: command not found
-```
-**Çözüm:**
 ```bash
-pip install streamlit
+python train_yolo_model.py --size n --batch 8 --imgsz 640
+python train_yolo_model.py --size n --batch 4 --imgsz 416
 ```
 
-#### OpenCV (cv2) Import Hatası
-```
-❌ NameError: name 'cv2' is not defined
-```
-**Çözüm:**
-Bu hata düzeltildi! Ama emin olmak için:
+GPU yoksa CPU kullanın:
+
 ```bash
-pip install opencv-python
+python train_yolo_model.py --size n --batch 4 --device cpu
 ```
 
-#### YOLO Tespit Görseli Gösterilemiyor
-Web arayüzünde uyarı mesajı göreceksiniz. Sorun devam ederse:
+### Streamlit veya OpenCV Bulunamadı
+
 ```bash
-./web_durum_kontrol.sh
-pip install --upgrade opencv-python Pillow
+pip install streamlit opencv-python
 ```
 
-### Referans Veritabanı Sorunları
+### Feature Matching Referans Veritabanı Boş
 
-#### Feature Matching Başarısız
-```
-❌ Sorun: Referans veritabanı boş
-```
-**Çözüm:**
-```bash
-# Her parça için referans görseller ekle
+Her parça için referans görseller ekleyin:
+
+```text
 referans_gorseller/
-  ├── vida/     # min 5 görsel
-  ├── somun/    # min 5 görsel
-  ├── rulman/   # min 5 görsel
-  └── disli/    # min 5 görsel
+├── vida/
+├── somun/
+├── rulman/
+└── disli/
 ```
 
-### Paket Kurulum Sorunları
+### ESP32Cam Bağlantısı Başarısız
 
-#### PyTorch CUDA Uyumsuzluğu
 ```bash
-# CUDA 11.8 için
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-
-# CUDA 12.1 için
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-
-# CPU only
-pip install torch torchvision
+ping 192.168.1.100
+curl http://192.168.1.100/status
+python3 test_esp32cam.py -i 192.168.1.100 test-connection
 ```
 
-#### Ultralytics Bulunamadı
-```bash
-pip install ultralytics
-```
+Kontrol edilmesi gerekenler:
 
-## 📚 Ek Bilgiler
+- ESP32Cam ve bilgisayar aynı WiFi ağında olmalı.
+- IP adresi Arduino Serial Monitor çıktısıyla eşleşmeli.
+- Firewall yerel bağlantıyı engellememeli.
+- Akış kesiliyorsa frame güncelleme süresi artırılmalı veya YOLO tespiti kapatılmalıdır.
 
-### Desteklenen Parça Sınıfları
-- **Civata** (Bolt)
-- **Dişli** (Gear)
-- **Kayış** (Belt)
-- **Krank** (Crankshaft)
-- **Pim** (Pin)
-- **Piston** (Piston)
-- **Rulman** (Bearing)
-- **Somun** (Nut)
-- **Vida** (Screw/Bolt)
-- **Yay** (Spring)
-
-### Model Karşılaştırması
-
-| Özellik | YOLO | ResNet50 | Feature Matching | Hibrit |
-|---------|------|----------|------------------|--------|
-| **Hız** | ⚡⚡⚡⚡ | ⚡⚡⚡ | ⚡⚡⚡⚡⚡ | ⚡⚡ |
-| **Doğruluk** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ |
-| **Çoklu Nesne** | ✅ Evet | ❌ Hayır | ❌ Hayır | ⚠️ Sınırlı |
-| **Eğitim Gerekli** | ✅ Evet | ✅ Evet | ❌ Hayır | ✅ Evet |
-| **GPU Gerekli** | İsteğe bağlı | İsteğe bağlı | Hayır | İsteğe bağlı |
-| **Kullanım** | Üretim | Geliştirme | Prototip | Üretim |
-
-### Faydalı Komutlar
+## Faydalı Komutlar
 
 ```bash
-# Sistem durumu kontrolü
-./web_durum_kontrol.sh
-
-# Web uygulaması başlat
 ./web_test.sh
-
-# Hızlı YOLO eğitimi
+./web_durum_kontrol.sh
 ./hizli_egitim.sh
-
-# Model test scripti
 ./test_model.sh
-
-# Dataset kontrolü
-python check_dataset.py
-python check_training_data.py
-
-# Veri indirme
-python download_images.py --classes vida somun --per-class 50
-
-# YOLO doğruluk testi
 python test_dogruluk.py --limit 50
-
-# Sistem bilgileri
-python quick_test.py
+python download_images.py --classes vida somun --per-class 50
 ```
 
-## 🎓 Öğreticiler ve Kaynaklar
-
-### Video Rehberleri
-1. **Kurulum ve İlk Eğitim** → `baslangic_rehberi.sh` çalıştır
-2. **Web Kullanımı** → Yukarıdaki Web Uygulaması bölümüne bakın
-3. **Model Testi** → Model Performans Testi bölümüne bakın
-
-### Kod Örnekleri
-
-#### Python ile YOLO Kullanımı
-```python
-from ultralytics import YOLO
-
-# Model yükle
-model = YOLO('runs/detect/train/weights/best.pt')
-
-# Tahmin yap
-results = model.predict('foto.jpg', conf=0.25)
-
-# Sonuçları göster
-results[0].show()
-
-# Sonuçları kaydet
-results[0].save('sonuc.jpg')
-```
-
-#### ResNet50 ile Sınıflandırma
-```python
-from hybrid_detector import HibritTanima
-
-sistem = HibritTanima(
-    model_path='best_model.pth',
-    mod='dl'  # Sadece deep learning
-)
-
-sonuc = sistem.tanima_yap('test.jpg')
-print(f"Parça: {sonuc['parca']} ({sonuc['guven']:.1%})")
-```
-
-## 📞 Destek ve Katkı
-
-### Hata Bildirimi
-Hata bulduğunuzda:
-1. `./web_durum_kontrol.sh` çalıştırın
-2. Hata mesajını ve sistem bilgilerini kaydedin
-3. GitHub Issues'da bildirin
-
-### Katkıda Bulunma
-1. Projeyi fork edin
-2. Yeni branch oluşturun
-3. Değişikliklerinizi yapın
-4. Pull request gönderin
-
-## 📝 Lisans
+## Lisans
 
 Bu proje MIT lisansı altında lisanslanmıştır.
 
----
-
-**Kolay gelsin! 🚀 İyi çalışmalar!**
-
-Son güncelleme: 16 Ocak 2026
+Son güncelleme: 22 Haziran 2026
